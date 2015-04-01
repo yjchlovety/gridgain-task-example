@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+    _________        _____ __________________        _____
+    __  ____/___________(_)______  /__  ____/______ ____(_)_______
+    _  / __  __  ___/__  / _  __  / _  / __  _  __ `/__  / __  __ \
+    / /_/ /  _  /    _  /  / /_/ /  / /_/ /  / /_/ / _  /  _  / / /
+    \____/   /_/     /_/   \_,__/   \____/   \__,_/  /_/   /_/ /_/
+
+    Copyright (C) GridGain Systems. All Rights Reserved.
+    Version: 6.5.5
+-->
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	   xmlns:context="http://www.springframework.org/schema/context"
+	   xmlns:util="http://www.springframework.org/schema/util"
+       xsi:schemaLocation="
+       http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans.xsd
+	   http://www.springframework.org/schema/context 
+	   http://www.springframework.org/schema/context/spring-context.xsd
+	   http://www.springframework.org/schema/util
+	   http://www.springframework.org/schema/util/spring-util.xsd">
+    <!--
+        Configuration below demonstrates how to setup a GridGain node with three
+        preconfigured caches.
+
+        If you need to add streaming functionality, add your streamers
+        configuration in 'streamerConfiguration' property below.
+
+        If you need to enable GGFS, use separate configuration files located in 'config/hadoop'
+        folder. To start a GGFS data node use 'config/hadoop/default-config.xml' file. To start
+        a GGFS client node use 'config/hadoop/default-config-client.xml' file.
+    -->
+	<!---->
+	<context:property-placeholder ignore-unresolvable="true" location="file:${GRIDGAIN_HOME}/config/config.properties" />
+
+    <bean id="grid.cfg" class="org.gridgain.grid.GridConfiguration" scope="singleton">
+		
+    	
+    	<property name="localHost" value="${localHost}"/>
+    	
+    	<property name="peerClassLoadingEnabled" value="true"/>
+    	
+    	<!--控制台不再打印相关metrics信息-->
+    	<property name="metricsLogFrequency" value="0"/>
+
+		<!--网络超时120秒-->
+		<property name="networkTimeout" value="120000"/>
+
+		<!--网络重连尝试发送10次-->
+		<property name="networkSendRetryCount" value="10"/>
+
+		<!--网络重连间隔3秒-->
+		<property name="networkSendRetryDelay" value="3000"/>
+
+		<property name="collisionSpi" ref="collisionSpi"/>
+
+		<property name="marshaller" ref="marshaller"/>
+    	
+		<property name="checkpointSpi" ref="checkpointSpi"/>
+
+		<!-- Enable only some events and leave other ones disabled. -->
+		<property name="includeEventTypes">
+			<list>
+				<util:constant static-field="org.gridgain.grid.events.GridEventType.EVT_TASK_FAILED"/>
+				<util:constant static-field="org.gridgain.grid.events.GridEventType.EVT_TASK_FINISHED"/>
+				<util:constant static-field="org.gridgain.grid.events.GridEventType.EVT_JOB_MAPPED"/>
+				<util:constant static-field="org.gridgain.grid.events.GridEventType.EVT_JOB_TIMEDOUT"/>
+			</list>
+		</property>
+
+    	<!--容错机制-->
+    	<property name="failoverSpi" ref="failoverSpi"/>
+		
+		<!-- Configure internal thread pool. -->
+		<property name="executorService" ref="threadPoolExecutor"/>
+	 
+		<!-- Configure system thread pool. -->
+		<property name="systemExecutorService" ref="threadPoolExecutor"/>
+
+		<!-- Cache configurations. -->
+	    <property name="cacheConfiguration">
+	        <list>
+				<bean parent="cache-base">
+					<property name="name" value="share-data"/>
+				</bean>	
+	        </list>
+	    </property>
+
+		<property name="indexingSpi" ref="indexingSpi"/>
+	
+		<property name="restJettyPath" value="config/rest-jetty.xml"/>
+
+		<property name="discoverySpi" ref="discoverySpi"/>
+	
+		<property name="deploymentSpi" ref="deploymentSpi"/>
+
+		<property name="gridLogger" ref="gridLogger"/>
+
+		<property name="swapSpaceSpi" ref="swapSpaceSpi"/>
+
+		<property name="deploymentMode" value="CONTINUOUS"/>
+		
+    </bean>
+
+	<!-- Template for all example cache configurations. -->
+	<bean id="cache-base" abstract="true" class="org.gridgain.grid.cache.GridCacheConfiguration">
+		<property name="cacheMode" value="PARTITIONED"/>
+		<property name="atomicityMode" value="ATOMIC"/>
+		<property name="distributionMode" value="PARTITIONED_ONLY"/>
+		<property name="backups" value="1"/>
+		<!-- Set initial cache capacity to ~ 20M. -->
+		<property name="startSize" value="#{20 * 1024 * 1024}"/> 
+		<property name="preloadMode" value="ASYNC"/>
+		<property name="writeSynchronizationMode" value="FULL_ASYNC"/>
+		<!-- Set DGC frequency to 6 seconds. -->
+		<property name="dgcFrequency" value="6000"/>
+		<!-- Explicitly enable lock removal. -->
+		<property name="dgcRemoveLocks" value="true"/>
+		<!-- Consider locks that are held more than 5 seconds suspicious. -->
+		<property name="dgcSuspectLockTimeout" value="5000"/>
+		<property name="memoryMode" value="OFFHEAP_VALUES"/> <!-- Default memory mode. -->
+		<!-- Enable OffHeap and use max size of 10 Gigabytes. -->
+		<property name="offHeapMaxMemory" value="#{1024L * 1024L * 1024L * 2}"/>
+		<property name="swapEnabled" value="true"/>
+		<property name="evictionPolicy" ref="fifoEvictionPolicy"/>
+		<!-- Set to true to enable indexing for query examples, default value is false. 
+		<property name="queryIndexEnabled" value="true"/>-->
+	</bean>
+
+	<!-- FIFO eviction policy. -->
+	<bean id="fifoEvictionPolicy" class="org.gridgain.grid.cache.eviction.fifo.GridCacheFifoEvictionPolicy">
+		<!--
+		   Maximum number of cache entries this policy allows.
+		   If the number of entries in cache exceeds this quantity,
+		   the entries get evicted by FIFO algorithm.
+		-->
+		<property name="maxSize" value="1000000"/>
+	</bean>
+
+	<!-- Uncomment multicast IP finder to enable multicast-based discovery of initial nodes. -->
+	<!--<bean class="org.gridgain.grid.spi.discovery.tcp.ipfinder.multicast.GridTcpDiscoveryMulticastIpFinder">-->
+	<bean id="ipFinder" class="org.gridgain.grid.spi.discovery.tcp.ipfinder.multicast.GridTcpDiscoveryMulticastIpFinder">
+		<property name="multicastGroup" value="${ipFinder.multicastGroup}"/>
+		<property name="responseWaitTime" value="2000"/>
+		<property name="addressRequestAttempts" value="5"/>
+		<property name="shared" value="true"/>
+		<!---->
+		<property name="addresses">
+			<list>
+				<value>${localHost}:47500..47509</value>
+			</list>
+		</property>
+	</bean>
+
+	<bean id="deploymentSpi" class="org.gridgain.grid.spi.deployment.uri.GridUriDeploymentSpi">
+		<property name="temporaryDirectoryPath" value="#{ systemEnvironment['GRIDGAIN_HOME'] }/tmp/grid"/>
+	</bean>
+
+	<bean id="gridLogger" class="org.gridgain.grid.logger.log4j.GridLog4jLogger">
+		<constructor-arg type="java.lang.String" value="config/gridgain-log4j.xml"/>
+	</bean>
+
+	<bean id="swapSpaceSpi" class="org.gridgain.grid.spi.swapspace.file.GridFileSwapSpaceSpi">
+		<property name="baseDirectory" value="#{ systemEnvironment['GRIDGAIN_HOME'] }/work/master"/>
+	</bean>
+
+	<bean id="discoverySpi" class="org.gridgain.grid.spi.discovery.tcp.GridTcpDiscoverySpi">
+		<property name="heartbeatFrequency" value="100000"/>
+		<property name="ackTimeout" value="5000"/>
+		<property name="socketTimeout" value="120000"/>
+		<property name="networkTimeout" value="120000"/>
+		<property name="maxMissedHeartbeats" value="30"/>
+		<property name="ipFinder" ref="ipFinder"/>
+	</bean>
+
+	<bean id="threadPoolExecutor" class="org.gridgain.grid.thread.GridThreadPoolExecutor">
+		<!-- 64 core threads. -->
+		<constructor-arg type="int" value="64"/>
+		<!-- 200 max threads. -->
+		<constructor-arg type="int" value="1200"/>
+		<!-- 10 seconds keep-alive time. -->
+		<constructor-arg type="long" value="120000"/>
+		<!-- Use linked blocking queue. -->
+		<constructor-arg type="java.util.concurrent.BlockingQueue">
+			<bean class="java.util.concurrent.LinkedBlockingQueue"/>
+		</constructor-arg>
+	</bean>
+
+	<bean id="checkpointSpi" class="org.gridgain.grid.spi.checkpoint.sharedfs.GridSharedFsCheckpointSpi">
+		<!-- Change to shared directory path in your environment. -->
+		<property name="directoryPaths">
+		<list>
+		<value>#{systemEnvironment['GRIDGAIN_HOME']}/tmp/work/admin/directory/path</value>
+		<value>#{systemEnvironment['GRIDGAIN_HOME']}/tmp/work/guest/directory/path</value>
+		</list>
+		</property>
+	</bean>
+
+	<bean id="collisionSpi" class="org.gridgain.grid.spi.collision.fifoqueue.GridFifoQueueCollisionSpi">
+		<property name="parallelJobsNumber" value="${collisionSpi.parallelJobsNumber}"/>
+	</bean>
+
+	<bean id="marshaller" class="org.gridgain.grid.marshaller.optimized.GridOptimizedMarshaller">
+		<!-- Set to false to allow non-serializable objects in examples, default is true. -->
+		<property name="requireSerializable" value="false"/>
+	</bean>
+
+	<bean id="h2IndexingSpi" class="org.gridgain.grid.spi.indexing.h2.GridH2IndexingSpi">
+	  <!-- Index primitives (optional). -->
+	  <property name="defaultIndexPrimitiveKey" value="false"/>
+	  <!-- Enable fixed typing. -->
+	  <property name="defaultIndexFixedTyping" value="true"/>
+	  <!-- Store indexes OffHeap. -->
+	  <property name="maxOffHeapMemory" value="#{1024L * 1024L * 1024L * 10}"/>
+	</bean>
+
+	<bean id="alwaysFailoverSpi" class="org.gridgain.grid.spi.failover.always.GridAlwaysFailoverSpi">
+		<property name="maximumFailoverAttempts" value="5"/>
+	</bean>
+
+	<bean id="jobStealingFailoverSpi" class="org.gridgain.grid.spi.failover.jobstealing.GridJobStealingFailoverSpi">
+		<property name="maximumFailoverAttempts" value="5"/>
+	</bean>
+	
+	<util:list id="indexingSpi" list-class="java.util.ArrayList">  
+		<ref bean="h2IndexingSpi"/>
+	</util:list> 
+
+	<util:list id="failoverSpi" list-class="java.util.ArrayList">  
+		<ref bean="alwaysFailoverSpi"/>
+		<ref bean="jobStealingFailoverSpi"/>
+	</util:list> 
+
+</beans>
